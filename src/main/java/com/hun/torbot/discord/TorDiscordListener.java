@@ -25,7 +25,11 @@ public class TorDiscordListener extends ListenerAdapter {
 
     @Override
     public void onReady(@NotNull ReadyEvent event) {
-        log.info("Discord bot is ready. Guild count={}", event.getJDA().getGuilds().size());
+        log.info("Discord bot is ready. Guild count={}, guilds={}",
+                event.getJDA().getGuilds().size(),
+                event.getJDA().getGuilds().stream()
+                        .map(guild -> guild.getName() + "(" + guild.getId() + ")")
+                        .toList());
         event.getJDA().getGuilds().forEach(studyTrackingService::bootstrapGuild);
     }
 
