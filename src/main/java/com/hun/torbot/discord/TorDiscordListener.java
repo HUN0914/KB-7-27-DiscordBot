@@ -2,6 +2,7 @@ package com.hun.torbot.discord;
 
 import com.hun.torbot.study.StudyTrackingService;
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent;
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
 import net.dv8tion.jda.api.events.message.MessageReceivedEvent;
 import net.dv8tion.jda.api.events.session.ReadyEvent;
 import net.dv8tion.jda.api.hooks.ListenerAdapter;
@@ -30,7 +31,12 @@ public class TorDiscordListener extends ListenerAdapter {
                 event.getJDA().getGuilds().stream()
                         .map(guild -> guild.getName() + "(" + guild.getId() + ")")
                         .toList());
-        event.getJDA().getGuilds().forEach(studyTrackingService::bootstrapGuild);
+        event.getJDA().getGuilds().forEach(guild -> {
+            studyTrackingService.bootstrapGuild(guild);
+            guild.updateCommands()
+                    .addCommands(torCommandService.slashCommands())
+                    .queue();
+        });
     }
 
     @Override
@@ -41,6 +47,16 @@ public class TorDiscordListener extends ListenerAdapter {
                 event.getAuthor().getName(),
                 event.getMessage().getContentRaw());
         torCommandService.handle(event.getMessage());
+    }
+
+    @Override
+    public void onSlashCommandInteraction(@NotNull SlashCommandInteractionEvent event) {
+        log.info("Slash command received. guild={}, channel={}, user={}, name={}",
+                event.getGuild() == null ? "DM" : event.getGuild().getId(),
+                event.getChannel().getId(),
+                event.getUser().getName(),
+                event.getName());
+        torCommandService.handle(event);
     }
 
     @Override
