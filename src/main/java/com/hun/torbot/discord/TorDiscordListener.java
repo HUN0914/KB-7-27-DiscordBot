@@ -35,7 +35,12 @@ public class TorDiscordListener extends ListenerAdapter {
             studyTrackingService.bootstrapGuild(guild);
             guild.updateCommands()
                     .addCommands(torCommandService.slashCommands())
-                    .queue();
+                    .queue(
+                            commands -> log.info("Slash commands synced for guild={}({}), count={}",
+                                    guild.getName(), guild.getId(), commands.size()),
+                            failure -> log.error("Failed to sync slash commands for guild={}({})",
+                                    guild.getName(), guild.getId(), failure)
+                    );
         });
     }
 
