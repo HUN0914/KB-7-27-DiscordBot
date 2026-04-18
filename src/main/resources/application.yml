@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: tor-study-bot
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:mysql://localhost:3306/tor_study_bot?serverTimezone=Asia/Seoul&characterEncoding=UTF-8}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    username: ${SPRING_DATASOURCE_USERNAME:tor_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:tor_password}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
+    properties:
+      hibernate:
+        format_sql: true
+
+discord:
+  bot-token: ${DISCORD_BOT_TOKEN:}
+  report-channel-id: ${DISCORD_REPORT_CHANNEL_ID:0}
+  admonition-channel-id: ${DISCORD_ADMONITION_CHANNEL_ID:}
+  study-voice-channel-name: ${DISCORD_STUDY_VOICE_CHANNEL_NAME:공부방1}
+  zone-id: ${DISCORD_TIMEZONE:Asia/Seoul}
+
+logging:
+  level:
+    root: info
+    com.hun.torbot: info
