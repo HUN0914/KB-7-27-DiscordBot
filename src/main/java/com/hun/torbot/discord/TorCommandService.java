@@ -21,6 +21,8 @@ public class TorCommandService {
 
     private static final Pattern STUDY_QUERY_PATTERN =
             Pattern.compile("^!(?:(.+?)\\s+)?(일간|주간|월간)\\s*공부\\s*시간$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern LEAVE_GUILD_PATTERN =
+            Pattern.compile("^!서버나가기\\s+(\\d+)$");
 
     private final AttendanceService attendanceService;
     private final StudyTrackingService studyTrackingService;
@@ -48,6 +50,28 @@ public class TorCommandService {
 
         if (raw.equals("!") || raw.equalsIgnoreCase("!help") || raw.equals("!명령어") || raw.equals("!도움말")) {
             channel.sendMessage(helpMessage()).queue();
+            return;
+        }
+        if (raw.equals("!서버목록")) {
+            String guilds = message.getJDA().getGuilds().stream()
+                    .map(joinedGuild -> "- " + joinedGuild.getName() + " (" + joinedGuild.getId() + ")")
+                    .reduce("현재 참가 중인 서버 목록\n", (acc, value) -> acc + value + "\n");
+            channel.sendMessage(guilds.trim()).queue();
+            return;
+        }
+        Matcher leaveGuildMatcher = LEAVE_GUILD_PATTERN.matcher(raw);
+        if (leaveGuildMatcher.matches()) {
+            String guildId = leaveGuildMatcher.group(1);
+            Guild targetGuild = message.getJDA().getGuildById(guildId);
+            if (targetGuild == null) {
+                channel.sendMessage("해당 서버를 찾지 못했습니다. `!서버목록`으로 다시 확인해 주세요.").queue();
+                return;
+            }
+            String guildName = targetGuild.getName();
+            targetGuild.leave().queue(
+                    success -> channel.sendMessage("`" + guildName + "` 서버에서 나갔습니다.").queue(),
+                    failure -> channel.sendMessage("서버 나가기에 실패했습니다: " + failure.getMessage()).queue()
+            );
             return;
         }
         if (raw.equals("!출석")) {
@@ -136,6 +160,12 @@ public class TorCommandService {
 
                 `!출석`
                 오늘 출석을 기록합니다. 하루에 한 번만 가능합니다.
+
+                `!서버목록`
+                봇이 들어가 있는 서버 목록과 서버 ID를 보여줍니다.
+
+                `!서버나가기 서버ID`
+                지정한 서버 ID의 서버에서 봇이 나갑니다.
 
                 기준 음성채널: `%s`
                 """.formatted(studyTrackingService.getStudyChannelName());
