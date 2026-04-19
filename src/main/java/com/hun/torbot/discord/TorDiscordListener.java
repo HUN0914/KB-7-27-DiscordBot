@@ -11,6 +11,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+import java.util.concurrent.CompletableFuture;
+
 @Component
 public class TorDiscordListener extends ListenerAdapter {
 
@@ -32,7 +34,6 @@ public class TorDiscordListener extends ListenerAdapter {
                         .map(guild -> guild.getName() + "(" + guild.getId() + ")")
                         .toList());
         event.getJDA().getGuilds().forEach(guild -> {
-            studyTrackingService.bootstrapGuild(guild);
             guild.updateCommands()
                     .addCommands(torCommandService.slashCommands())
                     .queue(
@@ -41,6 +42,15 @@ public class TorDiscordListener extends ListenerAdapter {
                             failure -> log.error("Failed to sync slash commands for guild={}({})",
                                     guild.getName(), guild.getId(), failure)
                     );
+            CompletableFuture.runAsync(() -> {
+                try {
+                    log.info("Starting async guild bootstrap. guild={}({})", guild.getName(), guild.getId());
+                    studyTrackingService.bootstrapGuild(guild);
+                    log.info("Finished async guild bootstrap. guild={}({})", guild.getName(), guild.getId());
+                } catch (Exception exception) {
+                    log.error("Async guild bootstrap failed. guild={}({})", guild.getName(), guild.getId(), exception);
+                }
+            });
         });
     }
 

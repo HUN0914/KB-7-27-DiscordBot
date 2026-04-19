@@ -11,6 +11,7 @@ import net.dv8tion.jda.api.entities.Guild;
 import net.dv8tion.jda.api.entities.Message;
 import net.dv8tion.jda.api.entities.channel.middleman.MessageChannel;
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent;
+import net.dv8tion.jda.api.interactions.InteractionHook;
 import net.dv8tion.jda.api.interactions.commands.OptionMapping;
 import net.dv8tion.jda.api.interactions.commands.OptionType;
 import net.dv8tion.jda.api.interactions.commands.build.CommandData;
@@ -258,12 +259,11 @@ public class TorCommandService {
         }
 
         log.info("Matched slash check-in. guild={}, member={}", member.getGuild().getId(), member.getId());
-        AttendanceResult result = attendanceService.checkIn(member);
-        if (result.firstCheckInToday()) {
-            event.reply("`" + result.displayName() + "`님 오늘 출석 완료했습니다.").queue();
-            return;
-        }
-        event.reply("`" + result.displayName() + "`님은 오늘 이미 출석했습니다.").queue();
+        event.deferReply().queue(
+                hook -> replyCheckIn(member, hook),
+                failure -> log.error("Failed to defer slash check-in. guild={}, member={}",
+                        member.getGuild().getId(), member.getId(), failure)
+        );
     }
 
     private void handleStudyTimeSlash(SlashCommandInteractionEvent event) {
@@ -288,30 +288,10 @@ public class TorCommandService {
         }
         log.info("Matched slash study-time. guild={}, range={}", guild.getId(), rangeType);
 
-        OptionMapping memberOption = event.getOption("대상");
-        if (memberOption == null) {
-            event.reply(renderGuildSummary(guild, rangeType)).queue();
-            return;
-        }
-
-        Member targetMember = memberOption.getAsMember();
-        if (targetMember == null) {
-            log.warn("Slash study-time target member missing. guild={}", guild.getId());
-            event.reply("대상 멤버를 찾지 못했습니다.").setEphemeral(true).queue();
-            return;
-        }
-
-        Optional<StudyMemberSummary> summary = studyTrackingService.getMemberSummary(guild, targetMember.getId(), rangeType);
-        if (summary.isEmpty()) {
-            log.warn("Slash study-time summary not found. guild={}, targetMember={}, range={}",
-                    guild.getId(), targetMember.getId(), rangeType);
-            event.reply("해당 사용자의 기록을 찾지 못했습니다.").setEphemeral(true).queue();
-            return;
-        }
-
-        StudyMemberSummary result = summary.get();
-        event.reply("`" + result.displayName() + "`님의 " + rangeType.label() + " 공부 시간은 "
-                + StudyTimeFormatter.format(result.duration()) + "입니다.").queue();
+        event.deferReply().queue(
+                hook -> replyStudyTime(event, guild, rangeType, hook),
+                failure -> log.error("Failed to defer slash study-time. guild={}, range={}", guild.getId(), rangeType, failure)
+        );
     }
 
     private StudyRangeType parseRangeType(String value) {
@@ -328,6 +308,62 @@ public class TorCommandService {
         channel.sendMessage(content).queue(
                 success -> log.info("Message sent. context={}, channel={}, messageId={}", context, channel.getId(), success.getId()),
                 failure -> log.error("Message send failed. context={}, channel={}", context, channel.getId(), failure)
+        );
+    }
+
+    private void replyCheckIn(Member member, InteractionHook hook) {
+        AttendanceResult result = attendanceService.checkIn(member);
+        String content = result.firstCheckInToday()
+                ? "`" + result.displayName() + "`님 오늘 출석 완료했습니다."
+                : "`" + result.displayName() + "`님은 오늘 이미 출석했습니다.";
+        log.info("Sending slash check-in response. guild={}, member={}, content={}",
+                member.getGuild().getId(), member.getId(), content);
+        hook.sendMessage(content).queue(
+                success -> log.info("Slash check-in response sent. guild={}, member={}, messageId={}",
+                        member.getGuild().getId(), member.getId(), success.getId()),
+                failure -> log.error("Slash check-in response failed. guild={}, member={}",
+                        member.getGuild().getId(), member.getId(), failure)
+        );
+    }
+
+    private void replyStudyTime(SlashCommandInteractionEvent event, Guild guild, StudyRangeType rangeType, InteractionHook hook) {
+        OptionMapping memberOption = event.getOption("대상");
+        if (memberOption == null) {
+            String content = renderGuildSummary(guild, rangeType);
+            log.info("Sending slash guild study summary. guild={}, range={}", guild.getId(), rangeType);
+            hook.sendMessage(content).queue(
+                    success -> log.info("Slash guild study summary sent. guild={}, range={}, messageId={}",
+                            guild.getId(), rangeType, success.getId()),
+                    failure -> log.error("Slash guild study summary failed. guild={}, range={}", guild.getId(), rangeType, failure)
+            );
+            return;
+        }
+
+        Member targetMember = memberOption.getAsMember();
+        if (targetMember == null) {
+            log.warn("Slash study-time target member missing. guild={}", guild.getId());
+            hook.sendMessage("대상 멤버를 찾지 못했습니다.").setEphemeral(true).queue();
+            return;
+        }
+
+        Optional<StudyMemberSummary> summary = studyTrackingService.getMemberSummary(guild, targetMember.getId(), rangeType);
+        if (summary.isEmpty()) {
+            log.warn("Slash study-time summary not found. guild={}, targetMember={}, range={}",
+                    guild.getId(), targetMember.getId(), rangeType);
+            hook.sendMessage("해당 사용자의 기록을 찾지 못했습니다.").setEphemeral(true).queue();
+            return;
+        }
+
+        StudyMemberSummary result = summary.get();
+        String content = "`" + result.displayName() + "`님의 " + rangeType.label() + " 공부 시간은 "
+                + StudyTimeFormatter.format(result.duration()) + "입니다.";
+        log.info("Sending slash member study summary. guild={}, targetMember={}, range={}, content={}",
+                guild.getId(), targetMember.getId(), rangeType, content);
+        hook.sendMessage(content).queue(
+                success -> log.info("Slash member study summary sent. guild={}, targetMember={}, range={}, messageId={}",
+                        guild.getId(), targetMember.getId(), rangeType, success.getId()),
+                failure -> log.error("Slash member study summary failed. guild={}, targetMember={}, range={}",
+                        guild.getId(), targetMember.getId(), rangeType, failure)
         );
     }
 }
