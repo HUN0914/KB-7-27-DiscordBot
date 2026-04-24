@@ -32,8 +32,8 @@ public class TorCommandService {
 
     private static final Pattern STUDY_QUERY_PATTERN =
             Pattern.compile("^!(?:(.+?)\\s+)?(일간|주간|월간)\\s*공부\\s*시간$", Pattern.CASE_INSENSITIVE);
-    private static final Pattern LEAVE_GUILD_PATTERN =
-            Pattern.compile("^!서버나가기\\s+(\\d+)$");
+    private static final Pattern STUDY_RANKING_PATTERN =
+            Pattern.compile("^!(일간|주간|월간)\\s*순위\\s*보기$", Pattern.CASE_INSENSITIVE);
 
     private final AttendanceService attendanceService;
     private final StudyTrackingService studyTrackingService;
@@ -73,37 +73,6 @@ public class TorCommandService {
             sendMessage(channel, helpMessage(), "help");
             return;
         }
-        if (raw.equals("!서버목록")) {
-            log.info("Matched guild-list command. guild={}, channel={}", guild.getId(), channel.getId());
-            String guilds = message.getJDA().getGuilds().stream()
-                    .map(joinedGuild -> "- " + joinedGuild.getName() + " (" + joinedGuild.getId() + ")")
-                    .reduce("현재 참가 중인 서버 목록\n", (acc, value) -> acc + value + "\n");
-            sendMessage(channel, guilds.trim(), "guild-list");
-            return;
-        }
-        Matcher leaveGuildMatcher = LEAVE_GUILD_PATTERN.matcher(raw);
-        if (leaveGuildMatcher.matches()) {
-            String guildId = leaveGuildMatcher.group(1);
-            log.info("Matched leave-guild command. currentGuild={}, targetGuild={}", guild.getId(), guildId);
-            Guild targetGuild = message.getJDA().getGuildById(guildId);
-            if (targetGuild == null) {
-                log.warn("Leave-guild target not found. targetGuild={}", guildId);
-                sendMessage(channel, "해당 서버를 찾지 못했습니다. `!서버목록`으로 다시 확인해 주세요.", "leave-guild-not-found");
-                return;
-            }
-            String guildName = targetGuild.getName();
-            targetGuild.leave().queue(
-                    success -> {
-                        log.info("Leave-guild success. targetGuild={}({})", guildName, guildId);
-                        sendMessage(channel, "`" + guildName + "` 서버에서 나갔습니다.", "leave-guild-success");
-                    },
-                    failure -> {
-                        log.error("Leave-guild failed. targetGuild={}({})", guildName, guildId, failure);
-                        sendMessage(channel, "서버 나가기에 실패했습니다: " + failure.getMessage(), "leave-guild-failed");
-                    }
-            );
-            return;
-        }
         if (raw.equals("!출석")) {
             log.info("Matched check-in command. guild={}, channel={}, member={}",
                     guild.getId(), channel.getId(), message.getMember() == null ? "unknown" : message.getMember().getId());
@@ -113,6 +82,19 @@ public class TorCommandService {
                 return;
             }
             sendMessage(channel, "`" + result.displayName() + "`님은 오늘 이미 출석했습니다.", "check-in-duplicate");
+            return;
+        }
+        Matcher rankingMatcher = STUDY_RANKING_PATTERN.matcher(raw);
+        if (rankingMatcher.matches()) {
+            StudyRangeType rangeType = switch (rankingMatcher.group(1)) {
+                case "일간" -> StudyRangeType.DAILY;
+                case "주간" -> StudyRangeType.WEEKLY;
+                case "월간" -> StudyRangeType.MONTHLY;
+                default -> throw new IllegalStateException("Unsupported range");
+            };
+            log.info("Matched study ranking command. guild={}, channel={}, range={}",
+                    guild.getId(), channel.getId(), rangeType);
+            sendMessage(channel, renderGuildSummary(guild, rangeType), "study-ranking-guild");
             return;
         }
 
@@ -226,6 +208,15 @@ public class TorCommandService {
                 `!월간 공부 시간`
                 서버 멤버들의 이번 달 공부 시간을 보여줍니다.
 
+                `!일간 순위 보기`
+                서버 멤버들의 오늘 공부시간 순위를 보여줍니다.
+
+                `!주간 순위 보기`
+                서버 멤버들의 이번 주 공부시간 순위를 보여줍니다.
+
+                `!월간 순위 보기`
+                서버 멤버들의 이번 달 공부시간 순위를 보여줍니다.
+
                 `!닉네임 일간 공부 시간`
                 특정 멤버의 오늘 공부 시간을 보여줍니다.
 
@@ -237,12 +228,6 @@ public class TorCommandService {
 
                 `!출석`
                 오늘 출석을 기록합니다. 하루에 한 번만 가능합니다.
-
-                `!서버목록`
-                봇이 들어가 있는 서버 목록과 서버 ID를 보여줍니다.
-
-                `!서버나가기 서버ID`
-                지정한 서버 ID의 서버에서 봇이 나갑니다.
 
                 기준 음성채널: `%s`
                 """.formatted(studyTrackingService.getStudyChannelName());
