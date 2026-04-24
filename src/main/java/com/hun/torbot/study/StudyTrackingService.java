@@ -192,7 +192,7 @@ public class StudyTrackingService {
         if (member != null) {
             return member.getEffectiveName();
         }
-        return studySessionRepository.findFirstByGuildIdAndUserIdAndEndedAtIsNull(guild.getId(), userId)
+        return studySessionRepository.findTopByGuildIdAndUserIdOrderByStartedAtDesc(guild.getId(), userId)
                 .map(StudySession::getUsernameSnapshot)
                 .orElse(userId);
     }

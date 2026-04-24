@@ -10,6 +10,8 @@ public interface StudySessionRepository extends JpaRepository<StudySession, Long
 
     Optional<StudySession> findFirstByGuildIdAndUserIdAndEndedAtIsNull(String guildId, String userId);
 
+    Optional<StudySession> findTopByGuildIdAndUserIdOrderByStartedAtDesc(String guildId, String userId);
+
     List<StudySession> findByGuildIdAndEndedAtGreaterThanAndStartedAtLessThan(String guildId, Instant rangeStart, Instant rangeEnd);
 
     List<StudySession> findByGuildIdAndEndedAtIsNull(String guildId);
